@@ -13,6 +13,7 @@ export default function CalendarGfg() {
     session: string;
     professor: string;
   } | null>(null);
+  const [isCalendarVisible, setIsCalendarVisible] = useState(true); // Calendar visibility state
 
   useEffect(() => {
     setMounted(true);
@@ -24,7 +25,6 @@ export default function CalendarGfg() {
         }
         const data = await response.json();
 
-        // Check if absentDates is present and valid in the response
         if (data && Array.isArray(data.absentDates)) {
           setAbsentDates(data.absentDates);
         } else {
@@ -57,6 +57,12 @@ export default function CalendarGfg() {
     }
   };
 
+  // Close session details and show calendar
+  const handleCloseSessionDetails = () => {
+    setIsCalendarVisible(true); // Show the calendar again
+    setSessionDetails(null); // Reset session details
+  };
+
   if (!mounted) {
     return null; // Avoid rendering before the component is mounted
   }
@@ -64,23 +70,10 @@ export default function CalendarGfg() {
   return (
     <div className={styles.calendarContainer}>
       <h1 className={styles.title}>Student Absence Calendar</h1>
+      
       {error && <div className={styles.errorMessage}>{error}</div>}
 
-      <Calendar
-        onChange={onChange}
-        value={value}
-        tileClassName={({ date }) => {
-          const dateString = date.toISOString().split("T")[0];
-          return absentDates.includes(dateString) ? styles.absentTile : "";
-        }}
-        onClickDay={(date) => {
-          const dateString = date.toISOString().split("T")[0];
-          if (absentDates.includes(dateString)) {
-            fetchSessionDetails(dateString);
-          }
-        }}
-      />
-
+      {/* Display Session Details */}
       {sessionDetails && (
         <div className={styles.sessionDetails}>
           <h2>Session Information</h2>
@@ -90,7 +83,34 @@ export default function CalendarGfg() {
           <p>
             <strong>Professor:</strong> {sessionDetails.professor}
           </p>
+          
+          {/* Close button to return to the calendar */}
+          <button
+            className={styles.closeButton}
+            onClick={handleCloseSessionDetails}
+          >
+            Close Session Details
+          </button>
         </div>
+      )}
+
+      {/* Conditionally render the calendar only if it's visible */}
+      {isCalendarVisible && (
+        <Calendar
+          onChange={onChange}
+          value={value}
+          tileClassName={({ date }) => {
+            const dateString = date.toISOString().split("T")[0];
+            return absentDates.includes(dateString) ? styles.absentTile : "";
+          }}
+          onClickDay={(date) => {
+            const dateString = date.toISOString().split("T")[0];
+            if (absentDates.includes(dateString)) {
+              fetchSessionDetails(dateString); // Fetch session details
+              setIsCalendarVisible(false); // Hide the calendar once an absent day is clicked
+            }
+          }}
+        />
       )}
     </div>
   );
