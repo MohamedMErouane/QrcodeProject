@@ -9,11 +9,12 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  name  String
-  email String  @unique
-  role  String
-  class String?
+  id       Int     @id @default(autoincrement())
+  name     String
+  email    String  @unique
+  password String
+  role     String
+  class    String?
 
   // Relations
   attendance Attendance[]
@@ -36,5 +37,5 @@ model Attendance {
   session    Session  @relation(fields: [sessionId], references: [id])
   sessionId  Int
 
-  @@unique([userId, sessionId]) // Prevent duplicate attendance entries for the same session
+  @@unique([userId, sessionId]) 
 }

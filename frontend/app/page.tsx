@@ -37,10 +37,10 @@ export default function Login() {
       setUser(data);
   
       // Check user role and redirect accordingly
-      if (data.role === 1) {
+      if (data.role === "professor") {
         // Redirect to Professor page
         router.push('/professor');
-      } else if (data.role === 0) {
+      } else if (data.role === "student") {
         // Redirect to Student page
         router.push('/student');
       }

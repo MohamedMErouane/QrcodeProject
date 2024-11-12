@@ -5,6 +5,7 @@ from urllib.parse import urlparse, parse_qs
 from io import BytesIO
 import qrcode
 import psycopg2
+import bcrypt
 
 # Database connection details
 DB_HOST = '127.0.0.1'
@@ -54,27 +55,15 @@ class MyHandler(BaseHTTPRequestHandler):
 
         if parsed_url.path == '/api/absent-dates':
             # Return a list of absent dates
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps({"absentDates": ["2024-11-06", "2024-11-07"]}).encode())
+            self._send_response(200, {"absentDates": ["2024-11-06", "2024-11-07"]})
         
         elif parsed_url.path == '/api/session-details':
             # Get session details for a specific date
             date = query_params.get('date', [None])[0]
-            if date and date in sessions:
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps(sessions[date]).encode())
+            if date and date in session_store:
+                self._send_response(200, session_store[date])
             else:
-                self.send_response(404)
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "No session details found for this date"}).encode())
+                self._send_response(404, {"error": "No session details found for this date"})
 
     def handle_generate_qr(self):
         """Generate a QR code for a given URL."""
@@ -108,12 +97,7 @@ class MyHandler(BaseHTTPRequestHandler):
             self.wfile.write(img_bytes)
 
         except Exception as e:
-            # Handle errors
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
+            self._send_response(500, {'error': str(e)})
 
     def handle_login(self):
         """Handle user login by verifying credentials and returning session data."""
@@ -132,73 +116,60 @@ class MyHandler(BaseHTTPRequestHandler):
             password = data.get("password")
 
             if not username or not password:
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'Username and password are required'}).encode())
+                self._send_response(400, {'error': 'Username and password are required'})
                 return
 
+            # Ensure username is stripped of whitespace
+            username = username.strip()
+            print(f"Attempting to log in with username: {username}")
+
             # Query the database for user details
-            cur.execute("SELECT password, role, name FROM users WHERE username = %s", (username,))
+            query = """SELECT password, role, name FROM "User" WHERE name = %s"""
+            cur.execute(query, (username,))
             result = cur.fetchone()
+            print(f"Database query result: {result}")
 
             if result:
                 stored_password, role, name = result
 
-                # Verify the password (simple comparison; use bcrypt for better security)
+                # Directly compare plain-text passwords
                 if password == stored_password:
                     # Create a session ID and store user data
                     session_id = str(uuid.uuid4())
-                    session_store[session_id] = {'username': username, 'role': role, 'name': name}
-
-                    # Send response with user details and session ID
-                    response = {
-                        'session_id': session_id,
-                        'role': role,
-                        'name': name,
-                    }
-
-                    self.send_response(200)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(json.dumps(response).encode())
+                    session_store[session_id] = {'username': username, 'role': role}
+                    print(f"Session created for user {username} with session_id {session_id}")
+                    self._send_response(200, {'session_id': session_id, 'username': name, 'role': role})
                 else:
-                    self.send_response(401)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({'error': 'Invalid credentials'}).encode())
+                    print("Invalid password.")
+                    self._send_response(401, {'error': 'Invalid password'})
             else:
-                self.send_response(401)
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'Invalid credentials'}).encode())
+                print("User not found.")
+                self._send_response(404, {'error': 'User not found'})
+
+            cur.close()
+            conn.close()
 
         except Exception as e:
-            # Handle errors
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
-        finally:
-            if conn:
-                cur.close()
-                conn.close()
+            print(f"Error: {e}")
+            self._send_response(500, {'error': str(e)})   
 
-    def get_session_user(self, session_id):
-        """Get user data from the session store."""
-        return session_store.get(session_id)
-
-# Run the server
+    def _send_response(self, status_code, content):
+        """Helper function to send JSON responses."""
+        self.send_response(status_code)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps(content).encode())
+# Server setup
 def run(server_class=HTTPServer, handler_class=MyHandler, port=8080):
+    """Run the HTTP server."""
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
     print(f'Server running on port {port}...')
     httpd.serve_forever()
 
 if __name__ == "__main__":
-    run()
+    try:
+        run(port=8080)
+    except KeyboardInterrupt:
+        print('\nServer stopped.')
