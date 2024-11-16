@@ -52,7 +52,14 @@ class MyHandler(BaseHTTPRequestHandler):
         """Handle GET requests."""
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
-
+        if parsed_url.path == '/api/professor-info':
+            # Retrieve the professor's information using the session ID
+            session_id = query_params.get('session_id', [None])[0]
+            if session_id and session_id in session_store:
+                user_data = session_store[session_id]
+                self._send_response(200, {'username': user_data['username'], 'role': user_data['role']})
+            else:
+                self._send_response(404, {"error": "Session not found"})
         if parsed_url.path == '/api/absent-dates':
             # Return a list of absent dates
             self._send_response(200, {"absentDates": ["2024-11-06", "2024-11-07"]})
@@ -134,7 +141,7 @@ class MyHandler(BaseHTTPRequestHandler):
 
                 # Directly compare plain-text passwords
                 if password == stored_password:
-                    # Create a session ID and store user data
+                # Create a session ID and store user data
                     session_id = str(uuid.uuid4())
                     session_store[session_id] = {'username': username, 'role': role}
                     print(f"Session created for user {username} with session_id {session_id}")
@@ -151,7 +158,8 @@ class MyHandler(BaseHTTPRequestHandler):
 
         except Exception as e:
             print(f"Error: {e}")
-            self._send_response(500, {'error': str(e)})   
+            self._send_response(500, {'error': str(e)})
+   
 
     def _send_response(self, status_code, content):
         """Helper function to send JSON responses."""
@@ -160,6 +168,7 @@ class MyHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(json.dumps(content).encode())
+
 # Server setup
 def run(server_class=HTTPServer, handler_class=MyHandler, port=8080):
     """Run the HTTP server."""

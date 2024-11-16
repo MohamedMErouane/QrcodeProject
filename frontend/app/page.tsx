@@ -1,6 +1,6 @@
 "use client";
 import { useState } from 'react';
-import { User } from '../types/user'
+import { User } from '../types/user';
 import { useRouter } from 'next/navigation'; // Import Next.js router for navigation
 import styles from '../styles/login.module.css'; // Import your CSS styles
 
@@ -8,14 +8,13 @@ export default function Login() {
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [sessionId, setSessionId] = useState<string | null>(null); // Add state for sessionId
   const router = useRouter(); // Next.js router
-  
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
   
     try {
-      // Send the request to your Python backend
       const response = await fetch('http://localhost:8080/login', {
         method: 'POST',
         headers: {
@@ -33,19 +32,23 @@ export default function Login() {
   
       const data = await response.json();
   
-      // Assuming the response contains user data with role and name
+      // Store user data and session ID in localStorage
+      localStorage.setItem('userData', JSON.stringify(data));
+      sessionStorage.setItem('username', username);   // Save the username from the backend
+
+      console.log(data)
+  
+      // Set user and sessionId in state
       setUser(data);
+      setSessionId(data.sessionId);
   
       // Check user role and redirect accordingly
       if (data.role === "professor") {
-        // Redirect to Professor page
         router.push('/professor');
       } else if (data.role === "student") {
-        // Redirect to Student page
         router.push('/student');
       }
     } catch (error) {
-      // Handle errors such as invalid credentials or server issues
       console.error(error);
       alert('Invalid credentials or server error');
     }
@@ -85,6 +88,7 @@ export default function Login() {
         </div>
       </div>
       {user && <p>Welcome, {user.name}</p>}
+      {sessionId && <p>Your session ID: {sessionId}</p>} {/* Optional: Display session ID */}
     </div>
   );
 }

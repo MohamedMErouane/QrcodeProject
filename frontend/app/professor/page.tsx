@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styles from '../../styles/porfessor.module.css';
 
 const ProfessorPage = () => {
@@ -7,9 +7,10 @@ const ProfessorPage = () => {
   const [formData, setFormData] = useState({
     sessionDate: '',
     sessionName: '',
-    professorName: 'Professor John',
+    professorName: '', // This will be set dynamically from the backend
   });
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null); // Store the session ID
 
   const classes = [
     { id: 1, name: 'Class 1' },
@@ -18,13 +19,34 @@ const ProfessorPage = () => {
     { id: 4, name: 'Class 4' },
   ];
 
+  useEffect(() => {
+    // Get the session ID from sessionStorage (after login)
+    const storedSessionId = sessionStorage.getItem('sessionId'); 
+    const storedUsername = sessionStorage.getItem('username'); // Assuming the username is also stored in sessionStorage
+  
+    if (storedSessionId) {
+      setSessionId(storedSessionId);
+      fetchProfessorInfo(storedSessionId); // Fetch professor info after setting sessionId
+    }
+  
+    if (storedUsername) {
+      setFormData(prev => ({
+        ...prev,
+        professorName: storedUsername, // Set the professor name from sessionStorage
+      }));
+    }
+  
+    console.log("Stored session ID:", storedSessionId); // Debug: check session ID
+    console.log("Stored username:", storedUsername); // Debug: check username
+  }, []);
+  
   const handleClassClick = () => {
     setShowForm(true);
   };
 
   const handleInputChange = (e: any) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
+    setFormData(prev => ({
       ...prev,
       [name]: value,
     }));
@@ -40,12 +62,11 @@ const ProfessorPage = () => {
       body: JSON.stringify(formData),
     });
 
-    // Check if the response is in binary (QR code image)
     if (response.ok) {
-      const blob = await response.blob(); // Get the response as a Blob (binary data)
-      const qrCodeUrl = URL.createObjectURL(blob); // Create a URL for the Blob
-      setQrCodeUrl(qrCodeUrl); // Set the image URL for displaying in the UI
-      setShowForm(false); // Hide the form after QR code is generated
+      const blob = await response.blob();
+      const qrCodeUrl = URL.createObjectURL(blob);
+      setQrCodeUrl(qrCodeUrl);
+      setShowForm(false);
     } else {
       const errorData = await response.json();
       console.error('Error generating QR code:', errorData);
@@ -53,12 +74,12 @@ const ProfessorPage = () => {
   };
 
   const handleCancel = () => {
-    setShowForm(false); // Hide form and show cards again
+    setShowForm(false);
   };
 
   return (
     <div className={styles.professorPage}>
-      <h1>Professor's Dashboard</h1>
+      <h1>{formData.professorName ? `${formData.professorName}'s Dashboard` : "Dashboard"}</h1>
       {!showForm && !qrCodeUrl && (
         <div className={styles.classCards}>
           {classes.map((classInfo) => (
@@ -73,14 +94,12 @@ const ProfessorPage = () => {
         </div>
       )}
 
-      {/* QR Code Section: Display QR code if generated */}
       {qrCodeUrl && (
         <div className={styles.qrCodeContainer}>
           <img src={qrCodeUrl} alt="QR Code" className={styles.qrImage} />
         </div>
       )}
 
-      {/* Form Section: Display form when showForm is true */}
       {showForm && !qrCodeUrl && (
         <div className={styles.formContainer}>
           <h2>Generate QR Code</h2>
