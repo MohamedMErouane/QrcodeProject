@@ -8,6 +8,7 @@ const ProfessorPage = () => {
     sessionDate: '',
     sessionName: '',
     professorName: '', // This will be set dynamically from the backend
+    sessionTime: '', // New field for session time
   });
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null); // Store the session ID
@@ -20,26 +21,25 @@ const ProfessorPage = () => {
   ];
 
   useEffect(() => {
-    // Get the session ID from sessionStorage (after login)
     const storedSessionId = sessionStorage.getItem('sessionId'); 
     const storedUsername = sessionStorage.getItem('username'); // Assuming the username is also stored in sessionStorage
-  
+
     if (storedSessionId) {
       setSessionId(storedSessionId);
       fetchProfessorInfo(storedSessionId); // Fetch professor info after setting sessionId
     }
-  
+
     if (storedUsername) {
       setFormData(prev => ({
         ...prev,
         professorName: storedUsername, // Set the professor name from sessionStorage
       }));
     }
-  
+
     console.log("Stored session ID:", storedSessionId); // Debug: check session ID
     console.log("Stored username:", storedUsername); // Debug: check username
   }, []);
-  
+
   const handleClassClick = () => {
     setShowForm(true);
   };
@@ -116,7 +116,7 @@ const ProfessorPage = () => {
               />
             </div>
             <div>
-              <label>Session Name:</label>
+              <label >Session Name:</label>
               <input
                 type="text"
                 name="sessionName"
@@ -125,6 +125,22 @@ const ProfessorPage = () => {
                 className={styles.input}
                 required
               />
+            </div>
+            <div>
+              <label >Session Time:</label>
+              <select
+                name="sessionTime"
+                value={formData.sessionTime}
+                onChange={handleInputChange}
+                className={styles.input}
+                required
+              >
+                <option value="">Select a time</option>
+                <option value="8 to 10">8 to 10</option>
+                <option value="10 to 12">10 to 12</option>
+                <option value="2 to 4">2 to 4</option>
+                <option value="4 to 6">4 to 6</option>
+              </select>
             </div>
             <div>
               <label>Professor Name:</label>

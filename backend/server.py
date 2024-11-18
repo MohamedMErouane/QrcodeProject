@@ -5,7 +5,11 @@ from urllib.parse import urlparse, parse_qs
 from io import BytesIO
 import qrcode
 import psycopg2
-import bcrypt
+import threading
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
 
 # Database connection details
 DB_HOST = '127.0.0.1'
@@ -14,7 +18,7 @@ DB_NAME = 'Qrcode'
 DB_USER = 'Mohamed'
 DB_PASSWORD = '123'
 
-# Session storage (for simplicity, this is in-memory; consider using a more robust solution)
+# Session storage (in-memory)
 session_store = {}
 
 def get_db_connection():
@@ -31,6 +35,42 @@ def get_db_connection():
     except Exception as e:
         print(f"Database connection error: {e}")
         return None
+
+
+def send_absent_notification(absentees):
+    """Send an email to notify about the absence."""
+    try:
+        # Sender and receiver details
+        sender_email = "merouanemohamed495@gmail.com"
+        receiver_email = "jackdoeno@gmail.com"
+        password = "egyv bnjp nnzb vfkn"  # Ensure this is a valid app password
+        
+        # Email subject and body
+        subject = "Absence Notification"
+        body = "The following students were marked as absent:\n\n" + "\n".join(absentees)
+
+        # Create the email content
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = receiver_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Connect to the SMTP server and send the email
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.set_debuglevel(1)  # Enables debug output to check SMTP session
+            server.starttls()  # Secure the connection
+            server.login(sender_email, password)
+            server.sendmail(sender_email, receiver_email, msg.as_string())
+
+        print("Absence notification sent successfully.")
+    except smtplib.SMTPAuthenticationError as e:
+        print("SMTP Authentication Error: Please check the app password and account settings.")
+        print(f"Details: {e}")
+    except Exception as e:
+        print(f"Error sending email: {e}")
+
+
 
 class MyHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -52,20 +92,10 @@ class MyHandler(BaseHTTPRequestHandler):
         """Handle GET requests."""
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
-        if parsed_url.path == '/api/professor-info':
-            # Retrieve the professor's information using the session ID
-            session_id = query_params.get('session_id', [None])[0]
-            if session_id and session_id in session_store:
-                user_data = session_store[session_id]
-                self._send_response(200, {'username': user_data['username'], 'role': user_data['role']})
-            else:
-                self._send_response(404, {"error": "Session not found"})
-        if parsed_url.path == '/api/absent-dates':
-            # Return a list of absent dates
-            self._send_response(200, {"absentDates": ["2024-11-06", "2024-11-07"]})
         
+        if parsed_url.path == '/api/absent-dates':
+            self._send_response(200, {"absentDates": ["2024-11-06", "2024-11-07"]})
         elif parsed_url.path == '/api/session-details':
-            # Get session details for a specific date
             date = query_params.get('date', [None])[0]
             if date and date in session_store:
                 self._send_response(200, session_store[date])
@@ -73,93 +103,167 @@ class MyHandler(BaseHTTPRequestHandler):
                 self._send_response(404, {"error": "No session details found for this date"})
 
     def handle_generate_qr(self):
-        """Generate a QR code for a given URL."""
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
-
-            login_url = data.get("login_url", "http://localhost:3000/login")
-
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=10,
-                border=4,
-            )
-            qr.add_data(login_url)
-            qr.make(fit=True)
-
-            # Convert QR code to binary data
-            img = qr.make_image(fill='black', back_color='white')
-            buffered = BytesIO()
-            img.save(buffered, format="PNG")
-            img_bytes = buffered.getvalue()
-
-            # Send the image as a response
-            self.send_response(200)
-            self.send_header('Content-type', 'image/png')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(img_bytes)
-
-        except Exception as e:
-            self._send_response(500, {'error': str(e)})
-
-    def handle_login(self):
-        """Handle user login by verifying credentials and returning session data."""
+        """Generate a QR code for a session."""
         try:
             conn = get_db_connection()
             if not conn:
                 raise Exception("Database connection failed")
+            
+            with conn.cursor() as cur:
+                # Read and parse the POST data
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
 
-            cur = conn.cursor()
+                session_name = data.get("session_name")
+                session_date = data.get("session_date")
+                session_time = data.get("session_time")
+                login_url = data.get("login_url", "http://localhost:3000/login")
 
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
+                if not session_name or not session_date or not session_time:
+                    self._send_response(400, {'error': 'Session name, date, and time are required'})
+                    return
 
-            username = data.get("username")
-            password = data.get("password")
+                # Reformat the date and time to match PostgreSQL's expected format
+                try:
+                    datetime_obj = datetime.strptime(f"{session_date} {session_time}", "%d/%m/%Y %H:%M:%S")
+                    formatted_date_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    self._send_response(400, {'error': 'Invalid date or time format'})
+                    return
 
-            if not username or not password:
-                self._send_response(400, {'error': 'Username and password are required'})
-                return
+                # Insert session data into the database
+                insert_query = """
+                INSERT INTO "Session" ("sessionDate", "topic")
+                VALUES (%s, %s)
+                RETURNING id;
+                """
+                cur.execute(insert_query, (formatted_date_time, session_name))
+                session_id = cur.fetchone()[0]
+                conn.commit()
 
-            # Ensure username is stripped of whitespace
-            username = username.strip()
-            print(f"Attempting to log in with username: {username}")
+                # Generate QR code
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_L,
+                    box_size=10,
+                    border=4,
+                )
+                qr.add_data(login_url)
+                qr.make(fit=True)
+                img = qr.make_image(fill='black', back_color='white')
 
-            # Query the database for user details
-            query = """SELECT password, role, name FROM "User" WHERE name = %s"""
-            cur.execute(query, (username,))
-            result = cur.fetchone()
-            print(f"Database query result: {result}")
+                buffered = BytesIO()
+                img.save(buffered, format="PNG")
+                img_bytes = buffered.getvalue()
 
-            if result:
-                stored_password, role, name = result
+                self.send_response(200)
+                self.send_header('Content-type', 'image/png')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(img_bytes)
 
-                # Directly compare plain-text passwords
-                if password == stored_password:
-                # Create a session ID and store user data
-                    session_id = str(uuid.uuid4())
-                    session_store[session_id] = {'username': username, 'role': role}
-                    print(f"Session created for user {username} with session_id {session_id}")
-                    self._send_response(200, {'session_id': session_id, 'username': name, 'role': role})
+            # Start a timer for 1 minute to check for absences and expire the QR code
+            threading.Timer(60, self.expire_qr_and_check_absentees, [session_id]).start()
+
+        except Exception as e:
+            self._send_response(500, {'error': str(e)})
+
+    def expire_qr_and_check_absentees(self, session_id):
+        """Expire the QR code and check for absent students."""
+        try:
+            conn = get_db_connection()
+            if not conn:
+                raise Exception("Database connection failed")
+            
+            with conn.cursor() as cur:
+                absent_query = """
+                    SELECT name
+                    FROM "User"
+                    WHERE id NOT IN (
+                        SELECT "userId"
+                        FROM "Attendance"
+                        WHERE "sessionId" = %s
+                        );
+                    """
+                cur.execute(absent_query, (session_id,))
+                absentees = [row[0] for row in cur.fetchall()]
+
+                if absentees:
+                    send_absent_notification(absentees)
+                    print(f"Absent users: {', '.join(absentees)}")
                 else:
-                    print("Invalid password.")
-                    self._send_response(401, {'error': 'Invalid password'})
-            else:
-                print("User not found.")
-                self._send_response(404, {'error': 'User not found'})
+                    print("No absentees found.")
 
-            cur.close()
+                conn.commit()
             conn.close()
 
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error checking absentees: {e}")
+            if conn:
+                conn.close()
+
+    def handle_login(self):
+        """Handle user login and update attendance."""
+        try:
+            conn = get_db_connection()
+            if not conn:
+                raise Exception("Database connection failed")
+            
+            with conn.cursor() as cur:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data)
+
+                username = data.get("username")
+                password = data.get("password")
+
+                if not username or not password:
+                    self._send_response(400, {'error': 'Username and password are required'})
+                    return
+
+                username = username.strip()
+                query = """SELECT id, password, role, name FROM "User" WHERE name = %s"""
+                cur.execute(query, (username,))
+                result = cur.fetchone()
+
+                if result:
+                    user_id, stored_password, role, name = result
+
+                    # For simplicity, comparing plain-text passwords
+                    if password == stored_password:
+                        session_id = str(uuid.uuid4())
+                        session_store[session_id] = {'username': username, 'role': role}
+                        session_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                        session_date=datetime(2024, 11, 18, 22, 0, 0, 0)
+                        
+                        # Query the database for a session that matches the current date
+                        session_query = """SELECT id FROM "Session" WHERE "sessionDate" = %s"""
+                        cur.execute(session_query, (session_date,))
+                        session_result = cur.fetchone()
+                        print("hadi hiya result",session_result)
+
+                        if session_result:
+                            session_id = session_result[0]
+                            attendance_query = """
+                            INSERT INTO "Attendance" ("status", "userId", "sessionId")
+                            VALUES (TRUE, %s, %s)
+                            ON CONFLICT ("userId", "sessionId") DO UPDATE SET status = TRUE;
+                            """
+                            cur.execute(attendance_query, (user_id, session_id))
+                            conn.commit()
+
+                        self._send_response(200, {'session_id': session_id, 'username': name, 'role': role})
+                        print(session_id, session_result)
+                    else:
+                        self._send_response(401, {'error': 'Invalid password'})
+                else:
+                    self._send_response(404, {'error': 'User not found'})
+
+            conn.close()
+
+        except Exception as e:
             self._send_response(500, {'error': str(e)})
-   
 
     def _send_response(self, status_code, content):
         """Helper function to send JSON responses."""
@@ -167,18 +271,15 @@ class MyHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        self.wfile.write(json.dumps(content).encode())
+        self.wfile.write(json.dumps(content).encode('utf-8'))
 
-# Server setup
+
 def run(server_class=HTTPServer, handler_class=MyHandler, port=8080):
-    """Run the HTTP server."""
+    """Run the server."""
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f'Server running on port {port}...')
+    print(f'Server running on port {port}')
     httpd.serve_forever()
 
 if __name__ == "__main__":
-    try:
-        run(port=8080)
-    except KeyboardInterrupt:
-        print('\nServer stopped.')
+    run()
