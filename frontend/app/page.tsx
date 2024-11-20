@@ -15,7 +15,7 @@ export default function Login() {
     e.preventDefault();
   
     try {
-      const response = await fetch('http://localhost:8080/login', {
+      const response = await fetch('http://100.77.197.88:8080/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,7 +5,7 @@ import "react-calendar/dist/Calendar.css";
 import styles from "../../styles/calendar.module.css";
 
 export default function CalendarGfg() {
-  const [value, onChange] = useState<Date | Date[]>(new Date());
+  const [value, onChange] = useState<Date | [Date, Date]>(new Date());
   const [absentDates, setAbsentDates] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export default function CalendarGfg() {
     setMounted(true);
     const fetchAbsentDates = async () => {
       try {
-        const response = await fetch("http://localhost:8080/api/absent-dates");
+        const response = await fetch("http:100.77.197.88:8080/api/absent-dates");
         if (!response.ok) {
           throw new Error(`Failed to fetch absent dates. Status: ${response.status}`);
         }
@@ -41,7 +41,7 @@ export default function CalendarGfg() {
 
   const fetchSessionDetails = async (date: string) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/session-details?date=${date}`);
+      const response = await fetch(`http://192.168.56.1:8080/api/session-details?date=${date}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch session details. Status: ${response.status}`);
       }

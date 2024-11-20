@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+// next.config.js
+module.exports = {
+  reactStrictMode: true,
+  output: 'standalone',  // Optional, improves server performance and supports standalone build
+  devIndicators: {
+    autoPrerender: false,
+  },
 };
-
-export default nextConfig;

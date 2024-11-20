@@ -118,7 +118,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 session_name = data.get("session_name")
                 session_date = data.get("session_date")
                 session_time = data.get("session_time")
-                login_url = data.get("login_url", "http://localhost:3000/login")
+                login_url = data.get("login_url", "http://100.77.197.88:3000/")
 
                 if not session_name or not session_date or not session_time:
                     self._send_response(400, {'error': 'Session name, date, and time are required'})
@@ -164,7 +164,7 @@ class MyHandler(BaseHTTPRequestHandler):
                 self.wfile.write(img_bytes)
 
             # Start a timer for 1 minute to check for absences and expire the QR code
-            threading.Timer(60, self.expire_qr_and_check_absentees, [session_id]).start()
+            threading.Timer(5*60, self.expire_qr_and_check_absentees, [session_id]).start()
 
         except Exception as e:
             self._send_response(500, {'error': str(e)})
@@ -235,7 +235,7 @@ class MyHandler(BaseHTTPRequestHandler):
                         session_id = str(uuid.uuid4())
                         session_store[session_id] = {'username': username, 'role': role}
                         session_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                        session_date=datetime(2024, 11, 18, 22, 0, 0, 0)
+                        session_date=datetime(2024, 11, 20, 14, 0, 0, 0)
                         
                         # Query the database for a session that matches the current date
                         session_query = """SELECT id FROM "Session" WHERE "sessionDate" = %s"""
@@ -276,7 +276,7 @@ class MyHandler(BaseHTTPRequestHandler):
 
 def run(server_class=HTTPServer, handler_class=MyHandler, port=8080):
     """Run the server."""
-    server_address = ('', port)
+    server_address = ('100.77.197.88', port)
     httpd = server_class(server_address, handler_class)
     print(f'Server running on port {port}')
     httpd.serve_forever()

@@ -25,14 +25,13 @@ const ProfessorPage = () => {
     const storedUsername = sessionStorage.getItem('username'); // Assuming the username is also stored in sessionStorage
 
     if (storedSessionId) {
-      setSessionId(storedSessionId);
-      fetchProfessorInfo(storedSessionId); // Fetch professor info after setting sessionId
+      setSessionId(storedSessionId);// Fetch professor info after setting sessionId
     }
 
     if (storedUsername) {
       setFormData(prev => ({
         ...prev,
-        professorName: storedUsername, // Set the professor name from sessionStorage
+        professorName: storedUsername, 
       }));
     }
 
@@ -51,28 +50,45 @@ const ProfessorPage = () => {
       [name]: value,
     }));
   };
+  console.log('Form Data:', formData);
 
   const handleFormSubmit = async (e: any) => {
     e.preventDefault();
-    const response = await fetch('http://localhost:8080/generate-qr', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(formData),
-    });
-
-    if (response.ok) {
-      const blob = await response.blob();
-      const qrCodeUrl = URL.createObjectURL(blob);
-      setQrCodeUrl(qrCodeUrl);
-      setShowForm(false);
-    } else {
-      const errorData = await response.json();
-      console.error('Error generating QR code:', errorData);
+  
+    // Format sessionDate to dd/MM/yyyy
+    const formattedDate = formData.sessionDate.split('-').reverse().join('/'); // Converts yyyy-MM-dd to dd/MM/yyyy
+  
+    // Map formData keys to match the backend format
+    const payload = {
+      session_name: formData.sessionName,
+      session_date: formattedDate,
+      session_time: formData.sessionTime,
+    };
+  
+    try {
+      const response = await fetch('http://100.77.197.88:8080/generate-qr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload), // Send the transformed payload
+      });
+  
+      if (response.ok) {
+        const blob = await response.blob();
+        const qrCodeUrl = URL.createObjectURL(blob);
+        setQrCodeUrl(qrCodeUrl);
+        setShowForm(false);
+      } else {
+        const errorData = await response.json();
+        console.error('Error generating QR code:', errorData);
+        alert(`Error: ${errorData.error || 'Failed to generate QR code.'}`);
+      }
+    } catch (error) {
+      console.error('Request failed:', error);
     }
   };
-
+  
   const handleCancel = () => {
     setShowForm(false);
   };
@@ -127,7 +143,7 @@ const ProfessorPage = () => {
               />
             </div>
             <div>
-              <label >Session Time:</label>
+              <label>Session Time:</label>
               <select
                 name="sessionTime"
                 value={formData.sessionTime}
@@ -136,10 +152,10 @@ const ProfessorPage = () => {
                 required
               >
                 <option value="">Select a time</option>
-                <option value="8 to 10">8 to 10</option>
-                <option value="10 to 12">10 to 12</option>
-                <option value="2 to 4">2 to 4</option>
-                <option value="4 to 6">4 to 6</option>
+                <option value="08:00:00">08:00:00</option>
+                <option value="10:00:00">10:00:00</option>
+                <option value="14:00:00">14:00:00</option>
+                <option value="16:00:00">16:00:00</option>
               </select>
             </div>
             <div>
