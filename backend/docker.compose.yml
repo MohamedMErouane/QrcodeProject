@@ -1,0 +1,11 @@
+version: '3.9'
+services:
+  dev-db:
+    image: postgres
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: Mohamed
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: Qrcode
+      
